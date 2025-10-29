@@ -1,0 +1,72 @@
+events {
+    worker_connections 1024;
+}
+
+http {
+    upstream app_backend {
+        # Active pool (handles all traffic by default)
+        server app_blue:3000 max_fails=${BLUE_MAX_FAILS:-1} fail_timeout=${BLUE_FAIL_TIMEOUT:-5s};
+        
+        # Backup pool (takes over when active fails)
+        server app_green:3000 backup max_fails=${GREEN_MAX_FAILS:-3} fail_timeout=${GREEN_FAIL_TIMEOUT:-10s};
+    }
+
+    # Health check endpoint for manual verification
+    upstream health_check {
+        server app_blue:3000;
+        server app_green:3000;
+    }
+
+    server {
+        listen 80;
+        
+        # Main service endpoint
+        location /version {
+            proxy_pass http://app_backend;
+            
+            # Critical timeout settings for fast failover
+            proxy_connect_timeout 2s;
+            proxy_send_timeout 5s;
+            proxy_read_timeout 5s;
+            
+            # Retry configuration for automatic failover
+            proxy_next_upstream error timeout http_500 http_502 http_503 http_504;
+            proxy_next_upstream_timeout 10s;
+            proxy_next_upstream_tries 2;
+            
+            # Header preservation
+            proxy_set_header Host $host;
+            proxy_set_header X-Real-IP $remote_addr;
+            proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+            proxy_set_header X-Forwarded-Proto $scheme;
+            
+            # Ensure app headers are passed through to client
+            proxy_pass_header X-App-Pool;
+            proxy_pass_header X-Release-Id;
+            proxy_hide_header X-Powered-By;
+            
+            # Buffer settings for performance
+            proxy_buffering off;
+        }
+
+        # Chaos endpoints (direct access only)
+        location /chaos/ {
+            # Deny external access to chaos endpoints through nginx
+            deny all;
+            return 404;
+        }
+
+        # Health check endpoint for monitoring
+        location /healthz {
+            proxy_pass http://health_check/healthz;
+            proxy_connect_timeout 1s;
+            proxy_send_timeout 2s;
+            proxy_read_timeout 2s;
+        }
+
+        # Root redirect to version endpoint
+        location / {
+            return 302 /version;
+        }
+    }
+}
