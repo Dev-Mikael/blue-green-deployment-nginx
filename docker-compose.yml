@@ -25,7 +25,7 @@ services:
       - app-network
 
   app_blue:
-    image: ${BLUE_IMAGE:-yimikaade/wonderful:blue}
+    image: ${BLUE_IMAGE:-yimikaade/wonderful:devops-stage-two}
     ports:
       - "8081:3000"
     environment:
@@ -42,7 +42,7 @@ services:
       start_period: 10s
 
   app_green:
-    image: ${GREEN_IMAGE:-yimikaade/wonderful:green}
+    image: ${GREEN_IMAGE:-yimikaade/wonderful:devops-stage-two}
     ports:
       - "8082:3000"
     environment:
